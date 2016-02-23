@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Forester</string>
+    <string name="title_activity_maps">Map</string>
+    <string name="title_add_poi">Add Point Of Interest</string>
+    <string name="title_add_sector">Add Sector</string>
+    <string name="title_map_switch_type">Switch Map Type</string>
+</resources>

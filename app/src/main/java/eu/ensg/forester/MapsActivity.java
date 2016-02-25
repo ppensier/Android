@@ -1,5 +1,6 @@
 package eu.ensg.forester;
 
+import android.content.Intent;
 import android.graphics.Color;
 import android.location.Location;
 import android.location.LocationListener;
@@ -14,6 +15,7 @@ import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -22,7 +24,11 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 
+import java.io.IOException;
+
 import eu.ensg.spatialite.GPSUtils;
+import eu.ensg.spatialite.SpatialiteDatabase;
+import eu.ensg.spatialite.SpatialiteOpenHelper;
 import eu.ensg.spatialite.geom.Point;
 import eu.ensg.spatialite.geom.XY;
 import eu.ensg.spatialite.geom.Polygon;
@@ -36,6 +42,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private Polygon currentSector;
     private boolean isRecording = false;
     private LinearLayout rl;
+    private SpatialiteDatabase database;
+    private String IDforester;
+    final String SERIAL = "string";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,17 +63,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 //            rl.setAlpha((float) 0.6);
 //            rl.setVisibility(View.VISIBLE);
 //        }
+
+        //recupération de l'ID du forrestier de l'activité Login
+
+        Intent intent = getIntent();
+        IDforester = intent.getStringExtra(SERIAL);
+        initDatabase();
+
     }
 
-    /**
-     * Manipulates the map once available.
-     * This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
-     * If Google Play services is not installed on the device, the user will be prompted to install
-     * it inside the SupportMapFragment. This method will only be triggered once the user has
-     * installed Google Play services and returned to the app.
-     */
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
@@ -106,7 +113,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         if (isRecording){
             currentSector.addCoordinate(currentPosition.getCoordinate());
-            currentSector
+            //currentSector
         }
     }
 
@@ -164,6 +171,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         add_poi_point(currentPosition);
         moveTo(currentPosition);
         zoomTo(10);
+
+        try {
+            database.exec("INSERT INTO PointOfInterest (ForesterID, Name, Description) VALUES ('" +
+                    IDforester + "', '" +
+                    "'Point of interest'" + ", '" +
+                    currentPosition.toString() + "') ");
+        }
+
+        catch (jsqlite.Exception e) {
+            e.printStackTrace();
+            //System.exit(0);
+        }
     }
 
     private void add_poi_point(Point point) {
@@ -171,7 +190,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                         .position(point.toLatLng())
                         .title("Point of interest")
                         .snippet(currentPosition.toString())
-                        .draggable(true)
+                        //.draggable(true)
         );
     }
 
@@ -188,6 +207,19 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         else if(mMap.getMapType() == GoogleMap.MAP_TYPE_TERRAIN){
             mMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
         }
+    }
+
+    private void initDatabase() {
+
+        try {
+            SpatialiteOpenHelper helper = new ForesterSpatialiteOpenHelper(this);
+            database = helper.getDatabase();
+        } catch (jsqlite.Exception | IOException e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Cannot initialize database !", Toast.LENGTH_LONG).show();
+            System.exit(0);
+        }
+
     }
 
 }

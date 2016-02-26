@@ -39,13 +39,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Save"
-            android:id="@+id/button3" />
+            android:id="@+id/id_save" />
 
         <Button
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Abort"
-            android:id="@+id/button4" />
+            android:id="@+id/id_abort" />
     </LinearLayout>
 
 </FrameLayout>

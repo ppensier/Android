@@ -6,12 +6,14 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -23,15 +25,18 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PolygonOptions;
 
 import java.io.IOException;
 
 import eu.ensg.spatialite.GPSUtils;
 import eu.ensg.spatialite.SpatialiteDatabase;
 import eu.ensg.spatialite.SpatialiteOpenHelper;
+import eu.ensg.spatialite.geom.BadGeometryException;
 import eu.ensg.spatialite.geom.Point;
 import eu.ensg.spatialite.geom.XY;
 import eu.ensg.spatialite.geom.Polygon;
+import jsqlite.Stmt;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, LocationListener {
 
@@ -45,6 +50,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private SpatialiteDatabase database;
     private String IDforester;
     final String SERIAL = "string";
+    public static final int GPS_SRID = 4326;
+    private com.google.android.gms.maps.model.Polygon currentPolygon;
+    private Button save;
+    private Button abort;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,12 +73,80 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 //            rl.setVisibility(View.VISIBLE);
 //        }
 
-        //recupération de l'ID du forrestier de l'activité Login
+        save = (Button) findViewById(R.id.id_save);
+        abort = (Button) findViewById(R.id.id_abort);
 
+        save.setOnClickListener(new View.OnClickListener() {
+                                    @Override
+                                    public void onClick(View v) {
+
+                                        save_onClick(v);
+
+                                    }
+
+                                }
+
+        );
+
+        abort.setOnClickListener(new View.OnClickListener() {
+
+
+                                     @Override
+                                     public void onClick(View v) {
+                                         abort_onClick(v);
+                                     }
+                                 }
+
+
+
+        );
+
+        //recupération de l'ID du forrestier de l'activité Login
         Intent intent = getIntent();
         IDforester = intent.getStringExtra(SERIAL);
         initDatabase();
 
+    }
+
+    private void abort_onClick(View v) {
+        isRecording = false;
+        //on masque la barre
+        rl.setVisibility(View.GONE);
+
+    }
+
+    private void save_onClick(View v) {
+
+        //on stoppe l'enregistrement
+        isRecording = false;
+        //on masque la barre
+        rl.setVisibility(View.GONE);
+
+//        currentSector.getCoordinates().size();
+        //Toast.makeText(this, currentSector.getCoordinates().size(), Toast.LENGTH_LONG).show();
+        Log.d("SIZE", "" + currentSector.getCoordinates());
+        add_sector_db("District", "Current District", currentSector);
+
+    }
+
+    private void add_sector_db(String name, String description, Polygon polygon) {
+
+        try {
+            database.exec("INSERT INTO District (ForesterID, Name, Description, Area) VALUES ('" +
+                    IDforester + "', '" +
+                    name + "', '" +
+                    description + "', " +
+                    polygon.toSpatialiteQuery(GPS_SRID) + ") ");
+        }
+        catch (jsqlite.Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Sql Error !!!!", Toast.LENGTH_LONG).show();
+            //System.exit(0);
+        }
+        catch (BadGeometryException e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Polygon marshalling Error !!!!", Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override
@@ -85,6 +162,43 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         //mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
         moveTo(currentPosition);
         zoomTo(ZOOM_INIT);
+
+        loadPointOfInterests();
+        loadDistricts();
+    }
+
+    private void loadPointOfInterests() {
+        try {
+            Stmt stmt = database.prepare("SELECT name, description, ST_asText(position) FROM PointOfInterest WHERE foresterID = " + IDforester);
+            while (stmt.step()) {
+                String name = stmt.column_string(0);
+                String description = stmt.column_string(1);
+                Point position = Point.unMarshall(stmt.column_string(2));
+
+                //on ajoute les points à la carte
+                add_poi_point(position);
+
+            }
+        } catch (jsqlite.Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Sql Error !!!!", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void loadDistricts() {
+        try {
+            Stmt stmt = database.prepare("SELECT name, ST_asText(area) as area FROM District WHERE foresterID = " + IDforester);
+            while (stmt.step()) {
+
+                Polygon polygon = Polygon.unMarshall(stmt.column_string(1));
+
+
+                addPolygon(polygon);
+            }
+        } catch (jsqlite.Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Sql Error !!!!", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void moveTo(Point position) {
@@ -113,9 +227,32 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
         if (isRecording){
             currentSector.addCoordinate(currentPosition.getCoordinate());
+            drawPolygon(currentSector);
             //currentSector
         }
     }
+
+    public void drawPolygon(Polygon geom) {
+        // on  réecrit le secteur à chaque fois
+        if (currentPolygon != null) currentPolygon.remove();
+        currentPolygon = addPolygon(geom);
+    }
+
+    public com.google.android.gms.maps.model.Polygon addPolygon(Polygon geom) {
+
+        PolygonOptions options = new PolygonOptions();
+
+        //on boucle sur tous les sommet du polygone
+        for (XY xy : geom.getCoordinates().getCoords()) {
+            options.add(new LatLng(xy.getY(), xy.getX()));
+        }
+
+        options.strokeWidth(5).strokeColor(Color.BLUE).geodesic(true);
+
+        return mMap.addPolygon(options);
+
+    }
+
 
     @Override
     public void onProviderEnabled(String provider) {
@@ -172,16 +309,27 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         moveTo(currentPosition);
         zoomTo(10);
 
-        try {
-            database.exec("INSERT INTO PointOfInterest (ForesterID, Name, Description) VALUES ('" +
-                    IDforester + "', '" +
-                    "'Point of interest'" + ", '" +
-                    currentPosition.toString() + "') ");
-        }
+        add_poi_db("Point of Interest", currentPosition.toString(), currentPosition);
 
+    }
+
+    private void add_poi_db(String name, String description, Point position) {
+
+        try {
+            database.exec("INSERT INTO PointOfInterest (ForesterID, Name, Description, Position) VALUES (" +
+                    IDforester + ", '" +
+                    name + "', '" +
+                    position.toString() + "', " +
+                    position.toSpatialiteQuery(GPS_SRID) + ") ");
+        }
         catch (jsqlite.Exception e) {
             e.printStackTrace();
+            Toast.makeText(this, "Sql Error !!!!", Toast.LENGTH_LONG).show();
             //System.exit(0);
+        }
+        catch (BadGeometryException e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Polygon marshalling Error !!!!", Toast.LENGTH_LONG).show();
         }
     }
 

@@ -16,6 +16,7 @@ public class ForesterSpatialiteOpenHelper extends SpatialiteOpenHelper {
 
     public static final String DB_FILE_NAME = "Spatialite.sqlite";
     public static final int VERSION = 1;
+    public static final int GPS_SRID = 4326;
 
     public ForesterSpatialiteOpenHelper(Context context) throws Exception, IOException {
         super(context, DB_FILE_NAME, VERSION);
@@ -45,14 +46,14 @@ public class ForesterSpatialiteOpenHelper extends SpatialiteOpenHelper {
                 "   REFERENCES forester (id)\n" +
                 ");");
 
-//        db.exec("SELECT AddGeometryColumn ('PointOfInterest',\n" +
-//                        "'Position', 4326, 'POINT', 'XY',\n" +
-//                        "0)"
-//        );
+        db.exec("SELECT AddGeometryColumn ('PointOfInterest',\n" +
+                        "'Position', 4326, 'POINT', 'XY',\n" +
+                        "0)"
+        );
 
         //getDatabase().exec("CREATE INDEX index_poi ON PointOfInterest (foresterID)");
 
-        db.exec("SELECT AddGeometryColumn('PointOfInterest', 'Position', " + 4326 + ", 'POINT', 'XY', 1);");
+        db.exec("SELECT AddGeometryColumn('PointOfInterest', 'Position', " + GPS_SRID + ", 'POINT', 'XY', 1);");
 
         // table district
         db.exec("CREATE TABLE IF NOT EXISTS District (\n" +
@@ -65,11 +66,11 @@ public class ForesterSpatialiteOpenHelper extends SpatialiteOpenHelper {
                 "   REFERENCES forester (id)\n" +
                 ")");
 
-//        db.exec("SELECT AddGeometryColumn('Disctrict',\n" +
-//                        "'Area', 4326, 'POLYGON', 'XY', 0"
-//        );
+        db.exec("SELECT AddGeometryColumn('Disctrict',\n" +
+                        "'Area', 4326, 'POLYGON', 'XY', 0"
+        );
 
-        db.exec("SELECT AddGeometryColumn('District', 'Area', " + 4326 + ", 'POLYGON', 'XY', 1);");
+        db.exec("SELECT AddGeometryColumn('District', 'Area', " + GPS_SRID + ", 'POLYGON', 'XY', 1);");
 
         //getDatabase().exec("CREATE INDEX index_sector ON District (foresterID)");
 
